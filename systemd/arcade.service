@@ -1,0 +1,16 @@
+[Unit]
+Description=Arcade LED Panel Controller
+After=network.target
+
+[Service]
+Type=simple
+User=__ARCADE_USER__
+EnvironmentFile=-__ARCADE_DIR__/.env
+ExecStart=__ARCADE_DIR__/scripts/run.sh
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

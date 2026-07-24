@@ -1,0 +1,16 @@
+# Core matrix library (Adafruit Blinka for Pi 5 PIO)
+adafruit-blinka-raspberry-pi5-piomatter
+
+# Image processing
+pillow
+numpy
+
+# GPIO (Pi 5 requires lgpio as the pin factory)
+gpiozero
+lgpio
+
+# Virtual display for game mode
+pyvirtualdisplay
+
+# CLI arg parsing (used by virtualdisplay.py)
+click
