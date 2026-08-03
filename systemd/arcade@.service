@@ -10,6 +10,9 @@ Conflicts=arcade.service
 [Service]
 Type=simple
 User=__ARCADE_USER__
+# See arcade.service — lgpio needs a writable cwd for its .lgd-nfy notify file.
+RuntimeDirectory=arcade
+WorkingDirectory=/run/arcade
 EnvironmentFile=-__ARCADE_DIR__/.env
 ExecStart=__ARCADE_DIR__/scripts/run.sh %i
 Restart=on-failure

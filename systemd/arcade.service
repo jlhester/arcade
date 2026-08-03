@@ -5,6 +5,11 @@ After=network.target
 [Service]
 Type=simple
 User=__ARCADE_USER__
+# lgpio writes a .lgd-nfy notify file in the working directory; the default
+# system-service cwd (/) isn't writable by the service user. /run/arcade is a
+# tmpfs dir systemd creates (and cleans up) for us.
+RuntimeDirectory=arcade
+WorkingDirectory=/run/arcade
 EnvironmentFile=-__ARCADE_DIR__/.env
 ExecStart=__ARCADE_DIR__/scripts/run.sh
 Restart=always
