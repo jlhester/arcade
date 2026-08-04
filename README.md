@@ -1,13 +1,13 @@
 # Arcade LED Panel
 
-A Raspberry Pi 5 powered 128×128 RGB LED matrix that switches between several modes via physical buttons:
+A Raspberry Pi 5 powered 128×128 RGB LED matrix that runs one of several modes:
 
 - **Wallart mode** — plays animated GIFs from `wallart-gifs` in random order, one per minute
 - **Christmas mode** — same, from the `xmas-gifs` directory
 - **Butterfly mode** — loops a single butterfly GIF continuously
 - **Game mode** — runs PICO-8 in splore via a virtual X display mirrored to the matrix
 
-A `controller` daemon manages mode processes and watches GPIO buttons so you can switch modes without touching a keyboard. Any mode can also be forced from the command line via systemd — see [Forcing a mode via systemd](#forcing-a-mode-via-systemd).
+A `controller` daemon manages the mode processes. **Right now the panel is driven entirely over systemd from the command line** — no physical buttons are wired yet ([Current state](#current-state-control-via-systemd-no-buttons)). Once the button board is built, the same daemon switches modes on GPIO presses, with systemd still available as an override ([State once buttons installed](#state-once-buttons-installed)).
 
 ## Hardware
 
@@ -16,7 +16,7 @@ A `controller` daemon manages mode processes and watches GPIO buttons so you can
 | Raspberry Pi 5 | Tested on Pi 5; Pi 4 would need `adafruit-blinka-raspberry-pi5-piomatter` equivalent |
 | 128×128 RGB LED matrix | Built from two 64×64 HUB75 panels |
 | Adafruit Matrix Bonnet | HUB75 driver HAT |
-| Momentary push buttons | One per mode, wired to GPIO (see below) |
+| Momentary push buttons | One per mode, wired to GPIO — **not yet wired; see [State once buttons installed](#state-once-buttons-installed)** |
 
 ### Button wiring
 
@@ -80,20 +80,70 @@ sudo systemctl status arcade
 journalctl -u arcade -f      # live logs
 ```
 
-### Forcing a mode via systemd
+## Current state: control via systemd (no buttons)
 
-The button controller (`arcade.service`) is the default owner of the matrix. To pin the panel to one mode without touching a button, start a template instance — this stops the controller automatically:
+No buttons are wired, so `ARCADE_BTN_*_PIN` are all `0` in `.env`. The controller (`arcade.service`) skips GPIO entirely and just boots into `ARCADE_DEFAULT_MODE` (default: `wallart`). You switch modes from the command line.
 
-```bash
-sudo systemctl start arcade@game        # or wallart / christmas / butterflies / butterfly
-sudo systemctl start arcade             # hand control back to the buttons
-```
-
-Only one process may drive the matrix at a time. `systemctl start arcade@<mode>` always stops the controller (via `Conflicts=`), but to switch directly between two forced modes use the helper, which stops every instance first:
+Only one process may drive the matrix at a time, so starting a `arcade@<mode>` template instance automatically stops whatever was running (via `Conflicts=`):
 
 ```bash
-sudo scripts/arcade-mode.sh christmas
+sudo systemctl start arcade@wallart      # all wallart-gifs, random rotation
+sudo systemctl start arcade@christmas    # all xmas-gifs, random rotation
+sudo systemctl start arcade@butterfly    # single butterfly.gif, looped forever
+sudo systemctl start arcade@game         # PICO-8 in splore
+sudo systemctl start arcade@butterflies  # (the whole butterfly-gifs directory)
 ```
+
+To return to the boot behaviour — the plain controller, which without buttons just sits in `ARCADE_DEFAULT_MODE`:
+
+```bash
+sudo systemctl start arcade
+```
+
+When switching **directly between two forced modes**, use the helper instead of two `start` commands — it stops every instance first so two processes never fight over the panel:
+
+```bash
+sudo scripts/arcade-mode.sh butterfly
+```
+
+See what's active and follow logs:
+
+```bash
+systemctl status 'arcade*'
+journalctl -u 'arcade@*' -f
+```
+
+**Reboot behaviour:** `arcade@<mode>` instances are not enabled, so they don't survive a reboot — on boot the panel always returns to `arcade.service` running `ARCADE_DEFAULT_MODE`. To change the boot mode, set `ARCADE_DEFAULT_MODE` in `.env` and `sudo systemctl restart arcade`.
+
+## State once buttons installed
+
+When the button board is built, each mode gets a physical button and the controller switches modes on GPIO presses. The systemd commands above still work as an override. **None of this needs a reinstall — buttons are pure `.env` config picked up on restart.**
+
+1. **Wire each button.** Connect one momentary push button per mode between its GPIO pin and **GND**. The controller enables internal pull-ups, so no external resistors are needed:
+   ```
+   GPIO pin ──┤ button ├── GND
+   ```
+2. **Pick a pin per mode** and set the matching env vars in `.env`. Every mode has a button slot; `0` means disabled. Suggested assignments:
+
+   | `.env` variable | Mode | Suggested pin (BCM) |
+   |---|---|---|
+   | `ARCADE_BTN_WALLART_PIN` | wallart | 17 |
+   | `ARCADE_BTN_GAME_PIN` | game | 27 |
+   | `ARCADE_BTN_CHRISTMAS_PIN` | christmas | *(choose)* |
+   | `ARCADE_BTN_BUTTERFLIES_PIN` | butterflies | *(choose)* |
+   | `ARCADE_BTN_BUTTERFLY_PIN` | butterfly | *(choose)* |
+
+   Give every enabled button a **unique** pin. Verify pin numbering with `pinout` in a terminal. (Pi 5 requires the `lgpio` pin factory, already set via `GPIOZERO_PIN_FACTORY=lgpio`.)
+3. **Apply it:**
+   ```bash
+   sudo systemctl restart arcade
+   ```
+4. **Verify.** `journalctl -u arcade -f` should log a `Button on GPIO <pin> → <mode> mode` line for each enabled button at startup. Press each button and confirm the panel switches.
+5. **(Optional) power-off button** — see [Power button](#power-button) above: add `dtoverlay=gpio-shutdown,gpio_pin=22` to `/boot/firmware/config.txt` (the Bonnet's J2 header can also handle graceful shutdown natively).
+
+**Gotchas:**
+- Buttons only work while the **button controller** (`arcade.service`) is the active owner. If you've forced a mode with `sudo systemctl start arcade@<mode>`, the controller is stopped and buttons do nothing until you run `sudo systemctl start arcade` again.
+- Remember to change the pin values away from `0` — leaving a pin at `0` keeps that button disabled even if it's physically wired.
 
 ## Directory layout
 
@@ -102,7 +152,7 @@ arcade/
 ├── controller.py       # mode manager daemon — watches GPIO, manages subprocesses
 ├── virtualdisplay.py   # mirrors a virtual X session to the LED matrix (game mode)
 ├── modes/
-│   └── art.py          # GIF player (art mode)
+│   └── art.py          # GIF player: --dir (wallart/christmas) or --file (butterfly)
 ├── systemd/
 │   ├── arcade.service   # button controller unit (rendered by install.sh)
 │   └── arcade@.service  # per-mode template unit: arcade@<mode> (rendered by install.sh)
