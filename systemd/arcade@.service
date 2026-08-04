@@ -1,0 +1,24 @@
+[Unit]
+Description=Arcade LED Panel — %i mode
+After=network.target
+# Conflicts= is symmetric: starting arcade@<mode> stops the button controller,
+# and starting arcade.service stops any running arcade@<mode>. Only one process
+# may drive the matrix at a time. (Switching between two forced modes: use
+# scripts/arcade-mode.sh, which stops all instances first.)
+Conflicts=arcade.service
+
+[Service]
+Type=simple
+User=__ARCADE_USER__
+# See arcade.service — lgpio needs a writable cwd for its .lgd-nfy notify file.
+RuntimeDirectory=arcade
+WorkingDirectory=/run/arcade
+EnvironmentFile=-__ARCADE_DIR__/.env
+ExecStart=__ARCADE_DIR__/scripts/run.sh %i
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -3,9 +3,12 @@
 Art mode: plays GIFs from a directory in random order, spending ARCADE_LOOP_LENGTH
 seconds on each before moving to the next. Cycles through all GIFs before repeating.
 
+With --file, plays a single GIF on an endless loop instead (butterfly mode).
+
 Usage:
     python art.py                          # uses ARCADE_GIF_DIR env var
     python art.py --dir /path/to/xmas-gifs
+    python art.py --file /path/to/butterfly.gif
 """
 import argparse
 import logging
@@ -24,6 +27,11 @@ _parser.add_argument(
     "--dir",
     default=os.environ.get("ARCADE_GIF_DIR", "/home/arcadeuser/wallart/wallart-gifs"),
     help="Directory of GIF files to play (overrides ARCADE_GIF_DIR)",
+)
+_parser.add_argument(
+    "--file",
+    default=None,
+    help="Play a single GIF on an endless loop (overrides --dir)",
 )
 _args = _parser.parse_args()
 
@@ -59,37 +67,65 @@ matrix = piomatter.PioMatter(
     geometry=geometry,
 )
 
-gifs = [f for f in os.listdir(GIF_DIR) if f.lower().endswith(".gif")]
-if not gifs:
-    logger.error("No GIFs found in %s", GIF_DIR)
-    sys.exit(1)
+def _show_frame(frame):
+    if BRIGHTNESS != 1.0:
+        frame = ImageEnhance.Brightness(frame).enhance(BRIGHTNESS)
+    canvas.paste(frame, (0, 0))
+    framebuffer[:] = np.asarray(canvas)
+    matrix.show()
+    time.sleep(FRAME_DELAY)
 
-logger.info("Art mode started: %d GIFs in %s", len(gifs), GIF_DIR)
-seen: set[int] = set()
 
-while True:
-    if len(seen) >= len(gifs):
-        seen = set()
-
-    gif_index = random.choice(list(set(range(len(gifs))) - seen))
-    seen.add(gif_index)
-    gif_file = os.path.join(GIF_DIR, gifs[gif_index])
-
-    try:
-        with Image.open(gif_file) as img:
-            logger.info("Playing %s", gifs[gif_index])
-            start_time = time.time()
-            while time.time() - start_time < LOOP_LENGTH:
-                for frame_idx in range(1, img.n_frames):
+def play_single(gif_file: str) -> None:
+    """Play one GIF on an endless loop until the process is killed."""
+    if not os.path.isfile(gif_file):
+        logger.error("GIF not found: %s", gif_file)
+        sys.exit(1)
+    logger.info("Butterfly mode started: looping %s", gif_file)
+    while True:
+        try:
+            with Image.open(gif_file) as img:
+                for frame_idx in range(img.n_frames):
                     img.seek(frame_idx)
-                    frame = img.resize((WIDTH, HEIGHT))
-                    if BRIGHTNESS != 1.0:
-                        frame = ImageEnhance.Brightness(frame).enhance(BRIGHTNESS)
-                    canvas.paste(frame, (0, 0))
-                    framebuffer[:] = np.asarray(canvas)
-                    matrix.show()
-                    time.sleep(FRAME_DELAY)
-                    if time.time() - start_time >= LOOP_LENGTH:
-                        break
-    except Exception:
-        logger.exception("Error playing %s", gif_file)
+                    _show_frame(img.resize((WIDTH, HEIGHT)))
+        except Exception:
+            logger.exception("Error playing %s", gif_file)
+            time.sleep(1)
+
+
+def play_directory(gif_dir: str) -> None:
+    """Play every GIF in a directory in random order, LOOP_LENGTH seconds each."""
+    gifs = [f for f in os.listdir(gif_dir) if f.lower().endswith(".gif")]
+    if not gifs:
+        logger.error("No GIFs found in %s", gif_dir)
+        sys.exit(1)
+
+    logger.info("Art mode started: %d GIFs in %s", len(gifs), gif_dir)
+    seen: set[int] = set()
+
+    while True:
+        if len(seen) >= len(gifs):
+            seen = set()
+
+        gif_index = random.choice(list(set(range(len(gifs))) - seen))
+        seen.add(gif_index)
+        gif_file = os.path.join(gif_dir, gifs[gif_index])
+
+        try:
+            with Image.open(gif_file) as img:
+                logger.info("Playing %s", gifs[gif_index])
+                start_time = time.time()
+                while time.time() - start_time < LOOP_LENGTH:
+                    for frame_idx in range(1, img.n_frames):
+                        img.seek(frame_idx)
+                        _show_frame(img.resize((WIDTH, HEIGHT)))
+                        if time.time() - start_time >= LOOP_LENGTH:
+                            break
+        except Exception:
+            logger.exception("Error playing %s", gif_file)
+
+
+if _args.file:
+    play_single(_args.file)
+else:
+    play_directory(GIF_DIR)

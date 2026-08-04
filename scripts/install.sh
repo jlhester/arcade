@@ -19,20 +19,31 @@ if [ ! -f "$ARCADE_DIR/.env" ]; then
 fi
 
 # Make scripts executable
-chmod +x "$ARCADE_DIR/scripts/run.sh"
+chmod +x "$ARCADE_DIR/scripts/run.sh" "$ARCADE_DIR/scripts/arcade-mode.sh"
 
-# Render service template
-sed \
-    -e "s|__ARCADE_DIR__|$ARCADE_DIR|g" \
-    -e "s|__ARCADE_USER__|$ARCADE_USER|g" \
-    "$ARCADE_DIR/systemd/arcade.service" \
-    | sudo tee "$SERVICE_DEST" > /dev/null
+# Render both unit files: the button controller and the per-mode template.
+render_unit() {
+    local src="$1" dest="$2"
+    sed \
+        -e "s|__ARCADE_DIR__|$ARCADE_DIR|g" \
+        -e "s|__ARCADE_USER__|$ARCADE_USER|g" \
+        "$src" \
+        | sudo tee "$dest" > /dev/null
+}
+
+render_unit "$ARCADE_DIR/systemd/arcade.service"  "$SERVICE_DEST"
+render_unit "$ARCADE_DIR/systemd/arcade@.service" "/etc/systemd/system/arcade@.service"
 
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME.service"
 sudo systemctl restart "$SERVICE_NAME.service"
 
 echo ""
-echo "Done. Check status with:"
+echo "Done. The button controller is running. Check status with:"
 echo "  sudo systemctl status $SERVICE_NAME"
 echo "  journalctl -u $SERVICE_NAME -f"
+echo ""
+echo "Force a single mode via systemd (stops the button controller):"
+echo "  sudo systemctl start arcade@game        # or wallart / christmas / butterfly"
+echo "  sudo $ARCADE_DIR/scripts/arcade-mode.sh wallart   # switch between forced modes"
+echo "  sudo systemctl start arcade             # back to button control"

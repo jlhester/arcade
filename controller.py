@@ -9,6 +9,7 @@ controller restarts it automatically.
 Modes and button-to-mode mapping are configured via environment variables.
 See .env.example for all options.
 """
+import argparse
 import logging
 import os
 import signal
@@ -26,22 +27,26 @@ PICO8_BIN = os.environ.get("ARCADE_PICO8_BIN", "/home/arcadeuser/pico-8/pico8_64
 BRIGHTNESS = os.environ.get("ARCADE_BRIGHTNESS", "0.5")
 LOOP_LENGTH = os.environ.get("ARCADE_LOOP_LENGTH", "60")
 FRAME_DELAY = os.environ.get("ARCADE_FRAME_DELAY", "0.2")
-DEFAULT_MODE = os.environ.get("ARCADE_DEFAULT_MODE", "art")
+DEFAULT_MODE = os.environ.get("ARCADE_DEFAULT_MODE", "wallart")
 
 # GIF directories — one per named art category
 _WALLART_BASE = os.environ.get("ARCADE_HOME", "/home/arcadeuser") + "/wallart"
 GIF_DIRS: dict[str, str] = {
-    "art":         os.environ.get("ARCADE_GIF_DIR",             f"{_WALLART_BASE}/wallart-gifs"),
-    "xmas":        os.environ.get("ARCADE_GIF_DIR_XMAS",        f"{_WALLART_BASE}/xmas-gifs"),
+    "wallart":     os.environ.get("ARCADE_GIF_DIR_WALLART",     f"{_WALLART_BASE}/wallart-gifs"),
+    "christmas":   os.environ.get("ARCADE_GIF_DIR_CHRISTMAS",   f"{_WALLART_BASE}/xmas-gifs"),
     "butterflies": os.environ.get("ARCADE_GIF_DIR_BUTTERFLIES", f"{_WALLART_BASE}/butterfly-gifs"),
     # add more categories here
 }
 
+# A single GIF looped forever (butterfly mode)
+BUTTERFLY_GIF = os.environ.get("ARCADE_BUTTERFLY_GIF", f"{_WALLART_BASE}/butterfly-gifs/butterfly.gif")
+
 # GPIO BCM pin numbers for each mode button (0 = disabled)
-BTN_ART_PIN         = int(os.environ.get("ARCADE_BTN_ART_PIN",         "17"))
+BTN_WALLART_PIN     = int(os.environ.get("ARCADE_BTN_WALLART_PIN",     "17"))
 BTN_GAME_PIN        = int(os.environ.get("ARCADE_BTN_GAME_PIN",        "27"))
-BTN_XMAS_PIN        = int(os.environ.get("ARCADE_BTN_XMAS_PIN",        "0"))
+BTN_CHRISTMAS_PIN   = int(os.environ.get("ARCADE_BTN_CHRISTMAS_PIN",   "0"))
 BTN_BUTTERFLIES_PIN = int(os.environ.get("ARCADE_BTN_BUTTERFLIES_PIN", "0"))
+BTN_BUTTERFLY_PIN   = int(os.environ.get("ARCADE_BTN_BUTTERFLY_PIN",   "0"))
 
 PYTHON = sys.executable
 _ART = str(HERE / "modes" / "art.py")
@@ -50,14 +55,17 @@ _ART = str(HERE / "modes" / "art.py")
 # Each mode is a command list passed to subprocess.Popen.
 # GIF category modes all use the same art.py script with a different --dir.
 MODES: dict[str, list[str]] = {
-    "art": [
-        PYTHON, _ART, "--dir", GIF_DIRS["art"],
+    "wallart": [
+        PYTHON, _ART, "--dir", GIF_DIRS["wallart"],
     ],
-    "xmas": [
-        PYTHON, _ART, "--dir", GIF_DIRS["xmas"],
+    "christmas": [
+        PYTHON, _ART, "--dir", GIF_DIRS["christmas"],
     ],
     "butterflies": [
         PYTHON, _ART, "--dir", GIF_DIRS["butterflies"],
+    ],
+    "butterfly": [
+        PYTHON, _ART, "--file", BUTTERFLY_GIF,
     ],
     "game": [
         PYTHON, str(HERE / "virtualdisplay.py"),
@@ -77,10 +85,11 @@ MODES: dict[str, list[str]] = {
 BUTTON_MAP: dict[int, str] = {
     pin: mode
     for pin, mode in [
-        (BTN_ART_PIN,         "art"),
+        (BTN_WALLART_PIN,     "wallart"),
         (BTN_GAME_PIN,        "game"),
-        (BTN_XMAS_PIN,        "xmas"),
+        (BTN_CHRISTMAS_PIN,   "christmas"),
         (BTN_BUTTERFLIES_PIN, "butterflies"),
+        (BTN_BUTTERFLY_PIN,   "butterfly"),
     ]
     if pin
 }
@@ -96,6 +105,34 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("controller")
+
+
+def _mode_env() -> dict:
+    """Environment passed to every mode subprocess."""
+    env = os.environ.copy()
+    env.update({
+        "ARCADE_LOG_DIR": LOG_DIR,
+        "ARCADE_BRIGHTNESS": BRIGHTNESS,
+        "ARCADE_LOOP_LENGTH": LOOP_LENGTH,
+        "ARCADE_FRAME_DELAY": FRAME_DELAY,
+    })
+    return env
+
+
+def run_single_mode(mode: str) -> None:
+    """Replace this process with a single mode's command.
+
+    Used by the systemd template unit (arcade@<mode>.service) to run one mode
+    directly — no GPIO, no restart loop. systemd owns the resulting process and
+    delivers signals to it, so exec (rather than a managed subprocess) is what
+    we want here.
+    """
+    if mode not in MODES:
+        logger.error("Unknown mode: %s", mode)
+        sys.exit(2)
+    logger.info("Running %s mode directly (systemd)", mode)
+    cmd = MODES[mode]
+    os.execvpe(cmd[0], cmd, _mode_env())
 
 
 class ModeController:
@@ -114,14 +151,7 @@ class ModeController:
                 return
             self._stop_current()
             logger.info("Starting %s mode", mode)
-            env = os.environ.copy()
-            env.update({
-                "ARCADE_LOG_DIR": LOG_DIR,
-                "ARCADE_BRIGHTNESS": BRIGHTNESS,
-                "ARCADE_LOOP_LENGTH": LOOP_LENGTH,
-                "ARCADE_FRAME_DELAY": FRAME_DELAY,
-            })
-            self.current_proc = subprocess.Popen(MODES[mode], env=env)
+            self.current_proc = subprocess.Popen(MODES[mode], env=_mode_env())
             self.current_mode = mode
 
     def restart_current(self) -> None:
@@ -175,6 +205,19 @@ def _setup_gpio(controller: ModeController) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Arcade LED panel mode controller")
+    parser.add_argument(
+        "--run-mode",
+        metavar="MODE",
+        help="Run a single mode directly and exit (used by the arcade@ systemd unit). "
+             "Bypasses GPIO buttons and the restart loop.",
+    )
+    args = parser.parse_args()
+
+    if args.run_mode:
+        run_single_mode(args.run_mode)
+        return  # unreachable: run_single_mode execs
+
     controller = ModeController()
 
     def handle_signal(sig, frame):
