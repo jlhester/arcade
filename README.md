@@ -4,6 +4,7 @@ A Raspberry Pi 5 powered 128×128 RGB LED matrix that runs one of several modes:
 
 - **Wallart mode** — plays animated GIFs from `wallart-gifs` in random order, one per minute
 - **Christmas mode** — same, from the `xmas-gifs` directory
+- **Halloween mode** — same, from the `halloween-gifs` directory
 - **Butterfly mode** — loops a single butterfly GIF continuously
 - **Game mode** — runs PICO-8 in splore via a virtual X display mirrored to the matrix
 
@@ -33,7 +34,7 @@ Default pin assignments (configurable in `.env`):
 | Button 1 | 17 | Wallart |
 | Button 2 | 27 | Game |
 
-Christmas, butterflies, and butterfly buttons are disabled by default (pin `0`); set their pin env vars in `.env` to enable them.
+Christmas, halloween, butterflies, and butterfly buttons are disabled by default (pin `0`); set their pin env vars in `.env` to enable them.
 
 ### Power button
 
@@ -89,6 +90,7 @@ Only one process may drive the matrix at a time, so starting a `arcade@<mode>` t
 ```bash
 sudo systemctl start arcade@wallart      # all wallart-gifs, random rotation
 sudo systemctl start arcade@christmas    # all xmas-gifs, random rotation
+sudo systemctl start arcade@halloween    # all halloween-gifs, random rotation
 sudo systemctl start arcade@butterfly    # single butterfly.gif, looped forever
 sudo systemctl start arcade@game         # PICO-8 in splore
 sudo systemctl start arcade@butterflies  # (the whole butterfly-gifs directory)
@@ -130,6 +132,7 @@ When the button board is built, each mode gets a physical button and the control
    | `ARCADE_BTN_WALLART_PIN` | wallart | 17 |
    | `ARCADE_BTN_GAME_PIN` | game | 27 |
    | `ARCADE_BTN_CHRISTMAS_PIN` | christmas | *(choose)* |
+   | `ARCADE_BTN_HALLOWEEN_PIN` | halloween | *(choose)* |
    | `ARCADE_BTN_BUTTERFLIES_PIN` | butterflies | *(choose)* |
    | `ARCADE_BTN_BUTTERFLY_PIN` | butterfly | *(choose)* |
 
@@ -174,6 +177,7 @@ All options live in `.env` (copied from `.env.example`). Key settings:
 |---|---|---|
 | `ARCADE_GIF_DIR_WALLART` | `~/wallart/wallart-gifs` | Directory of `.gif` files for wallart mode |
 | `ARCADE_GIF_DIR_CHRISTMAS` | `~/wallart/xmas-gifs` | Directory of `.gif` files for christmas mode |
+| `ARCADE_GIF_DIR_HALLOWEEN` | `~/wallart/halloween-gifs` | Directory of `.gif` files for halloween mode |
 | `ARCADE_GIF_DIR_BUTTERFLIES` | `~/wallart/butterfly-gifs` | Directory of `.gif` files for butterflies mode |
 | `ARCADE_BUTTERFLY_GIF` | `~/wallart/butterfly-gifs/butterfly.gif` | Single GIF looped by butterfly mode |
 | `ARCADE_LOG_DIR` | `~/logs` | Where log files are written |
@@ -186,6 +190,7 @@ All options live in `.env` (copied from `.env.example`). Key settings:
 | `ARCADE_BTN_WALLART_PIN` | `17` | GPIO BCM pin for wallart button (0 = disabled) |
 | `ARCADE_BTN_GAME_PIN` | `27` | GPIO BCM pin for game button (0 = disabled) |
 | `ARCADE_BTN_CHRISTMAS_PIN` | `0` | GPIO BCM pin for christmas button (0 = disabled) |
+| `ARCADE_BTN_HALLOWEEN_PIN` | `0` | GPIO BCM pin for halloween button (0 = disabled) |
 | `ARCADE_BTN_BUTTERFLIES_PIN` | `0` | GPIO BCM pin for butterflies button (0 = disabled) |
 | `ARCADE_BTN_BUTTERFLY_PIN` | `0` | GPIO BCM pin for butterfly button (0 = disabled) |
 

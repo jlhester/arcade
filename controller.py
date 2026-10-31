@@ -35,6 +35,7 @@ GIF_DIRS: dict[str, str] = {
     "wallart":     os.environ.get("ARCADE_GIF_DIR_WALLART",     f"{_WALLART_BASE}/wallart-gifs"),
     "christmas":   os.environ.get("ARCADE_GIF_DIR_CHRISTMAS",   f"{_WALLART_BASE}/xmas-gifs"),
     "butterflies": os.environ.get("ARCADE_GIF_DIR_BUTTERFLIES", f"{_WALLART_BASE}/butterfly-gifs"),
+    "halloween":   os.environ.get("ARCADE_GIF_DIR_HALLOWEEN",   f"{_WALLART_BASE}/halloween-gifs"),
     # add more categories here
 }
 
@@ -47,6 +48,7 @@ BTN_GAME_PIN        = int(os.environ.get("ARCADE_BTN_GAME_PIN",        "27"))
 BTN_CHRISTMAS_PIN   = int(os.environ.get("ARCADE_BTN_CHRISTMAS_PIN",   "0"))
 BTN_BUTTERFLIES_PIN = int(os.environ.get("ARCADE_BTN_BUTTERFLIES_PIN", "0"))
 BTN_BUTTERFLY_PIN   = int(os.environ.get("ARCADE_BTN_BUTTERFLY_PIN",   "0"))
+BTN_HALLOWEEN_PIN   = int(os.environ.get("ARCADE_BTN_HALLOWEEN_PIN",   "0"))
 
 PYTHON = sys.executable
 _ART = str(HERE / "modes" / "art.py")
@@ -66,6 +68,9 @@ MODES: dict[str, list[str]] = {
     ],
     "butterfly": [
         PYTHON, _ART, "--file", BUTTERFLY_GIF,
+    ],
+    "halloween": [
+        PYTHON, _ART, "--dir", GIF_DIRS["halloween"],
     ],
     "game": [
         PYTHON, str(HERE / "virtualdisplay.py"),
@@ -90,6 +95,7 @@ BUTTON_MAP: dict[int, str] = {
         (BTN_CHRISTMAS_PIN,   "christmas"),
         (BTN_BUTTERFLIES_PIN, "butterflies"),
         (BTN_BUTTERFLY_PIN,   "butterfly"),
+        (BTN_HALLOWEEN_PIN,   "halloween"),
     ]
     if pin
 }

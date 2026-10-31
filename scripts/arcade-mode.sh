@@ -13,7 +13,7 @@
 set -euo pipefail
 
 if [ "$#" -ne 1 ]; then
-    echo "usage: $0 <mode>   (game | wallart | christmas | butterflies | butterfly)" >&2
+    echo "usage: $0 <mode>   (game | wallart | christmas | butterflies | butterfly | halloween)" >&2
     exit 1
 fi
 
